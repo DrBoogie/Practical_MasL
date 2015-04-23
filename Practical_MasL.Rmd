@@ -1,0 +1,127 @@
+Practical Machine Learning - Prediction Assignment Writeup
+========================================================
+
+# General information
+
+The goal of this project is to analyse the data from the project "Human 
+Activity Recognition" which was obtained by tests on humans doing some particular 
+physical exercises, namely biceps-curls but with different kind of movements, called activity (there are five different activities, so five different kind of movements). 
+The entire data is collected from the test on only 6 humans. 
+
+The ultimative goal is to predict this activity from the variables which contain the sensor measurements about the movements. For this goal I use the machine learning algorithm called random forest which is actually an ensemble method and therefore very powerfull, so I could expect that it will do well in predicting. **Therefore I expect the out of sample error to be small, so 5% or less, this would mean a good model for me.** I use the cross calidation to estimate this error (see the details further).
+
+
+# Exploratory analysis.
+
+As the original data is in csv-format, I can look at it with UltraEdit or any othe suitable editor (Ecxel would also go, of course).
+As I see, there are many missings in the data, which are represented by the symbols "#DIV/0!".
+So my first task is to change this missings in the right way when reading the data to R.
+I replace "#DIV/0!" by "NA"  when reading the data, as follows (here the R code):
+
+
+```{r}
+# some settings first of all 
+rm(list = ls(all = TRUE))
+setwd('C:\\Users\\D_und_V\\Documents\\MATLAB\\Practical')
+library(caret)
+
+# read data
+train_orig <- read.csv(file="pml-training.csv", header=TRUE,
+    as.is = TRUE, stringsAsFactors = FALSE, sep=',', na.strings=c('NA','','#DIV/0!'))
+test_orig <- read.csv(file="pml-testing.csv", header=TRUE, as.is = TRUE,
+            stringsAsFactors = FALSE, sep=',', na.strings=c('NA','','#DIV/0!'))
+```
+
+
+Then I compare the training and the test data to check if they have the same structure (here the R Code):
+
+```{r}
+# Do the training and the test data have different column names?
+compar <- names(train_orig) != names(test_orig)
+diffcol <- length(which(as.logical(compar), arr.ind = TRUE))
+compar
+```
+The only difference is that the last columns of the test data and the training data are different.
+I look at these columns:
+```{r}
+tail(names(train_orig),1)
+tail(names(test_orig),1)
+```
+These columns are "problemID" in the training data set and "classe" in the test data set.
+This difference is not the problem as I have to throw away irrelevant variables anyway, so I do this furhter for both the training and test data set, which would eliminate this needless last column too.
+
+
+# Selecting variables.
+
+After investigating the variables I can see that the most relevant variables have the endings "_x", "_y" or "_z"
+in their names as it is natural because they are the meusurements of movements. I can hope that these variables are sufficient for good prediction, so I restrict the data to these variables. The only other variables which I need are "user_name" and of course "classe" which is the activity I have to predict. So I restrict the data as follows (here the R code):
+
+```{r}
+rx <- "(classe|user_name|.*_x$|.*_y$|.*_z$).*"
+relevant <-grep(rx, names(train_orig), perl=TRUE, value=TRUE)
+train_orig <- subset(train_orig, select=relevant)
+names(train_orig)
+```
+
+
+# Preprocessing variables.
+
+I set the variable "classe" as factor:
+
+
+```{r}
+# set
+train_orig$classe <- as.factor(train_orig$classe)
+```
+
+# Create cross validation set.
+
+I divide the training data set into two parts, one for training and other for cross validation, in proportion 80-20 (here the R code):
+
+```{r}
+set.seed(77117711)
+inTrain = createDataPartition(train_orig$classe, p = 4/5, list=FALSE)
+training = train_orig[inTrain,]
+crossValid = train_orig[-inTrain,]
+```
+
+# Model.
+
+As said before our method of choice is the random forest model which is very powefull. 
+So I build the model on a training set which has 36 variables and ca. 20000 observations. 
+I use the cross validation as the control method.
+The model building has a runtime of approximately 23 minutes. Here the R code:
+
+```{r}
+modFit <- train(classe ~., method="rf", data=training, 
+                trControl=trainControl(method='cv'), number=5, allowParallel=TRUE )
+```
+
+# Accuracy of model.
+
+I check the accuracy of mode for the training data set 
+
+```{r}
+trainingPred <- predict(modFit, training)
+confusionMatrix(trainingPred, training$classe)
+```
+
+and the cross validation data set
+
+```{r}
+cvPred <- predict(modFit, crossValid)
+confusionMatrix(cvPred, crossValid$classe)
+```
+
+**The last table shows that the out of sample error is actually under 2% which is even better than we hoped.**
+
+
+
+# Predicting on test data.
+
+```{r}
+testingPred <- predict(modFit, test_orig)
+testingPred
+```
+
+**With my model I was able to correcty predict all the 20 test cases.**
